@@ -1,0 +1,51 @@
+from kubernetes import client, config
+import csv
+
+def get_pod_network_traffic():
+    # Load the Kubernetes configuration
+    config.load_kube_config()
+
+    # Create an instance of the Kubernetes API client
+    api_client = client.CoreV1Api()
+
+    # Retrieve all pods in the cluster
+    pods = api_client.list_pod_for_all_namespaces().items
+
+    network_traffic_data = []
+
+    # Iterate through each pod and retrieve network traffic information
+    for pod in pods:
+        pod_name = pod.metadata.name
+        namespace = pod.metadata.namespace
+
+        # Retrieve the pod's network traffic information
+        response = api_client.read_namespaced_pod(pod_name, namespace, pretty=True)
+        for container_status in response.status.container_statuses:
+            if container_status.name == pod.spec.containers[0].name:  # Assuming only one container per pod
+                for port in container_status.ports:
+                    if port.protocol == "TCP":  # Adjust protocol as per your requirements
+                        network_traffic_data.append({
+                            'Pod': pod_name,
+                            'Namespace': namespace,
+                            'Source IP': port.host_ip,
+                            'Destination IP': port.container_port
+                        })
+
+    return network_traffic_data
+
+def save_network_traffic_to_csv(traffic_data):
+    filename = 'network_traffic.csv'
+
+    with open(filename, mode='w', newline='') as file:
+        fieldnames = ['Pod', 'Namespace', 'Source IP', 'Destination IP']
+        writer = csv.DictWriter(file, fieldnames=fieldnames)
+
+        writer.writeheader()
+        writer.writerows(traffic_data)
+
+    print(f"Network traffic data saved to {filename}.")
+
+# Main program
+if __name__ == '__main__':
+    network_traffic = get_pod_network_traffic()
+    save_network_traffic_to_csv(network_traffic)
